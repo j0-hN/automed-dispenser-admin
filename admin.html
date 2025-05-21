@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel - Automed Dispenser</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f6f8;
+      margin: 0;
+      padding: 20px;
+    }
+    header {
+      background-color: #2e7d32;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    main {
+      max-width: 700px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2e7d32;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 12px 20px;
+      background-color: #43a047;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 0 10px #43a047;
+      transition: 0.3s ease;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #388e3c;
+      box-shadow: 0 0 20px #66bb6a;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+    .error {
+      color: red;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Automed Dispenser Admin Panel</h1>
+    <p>Create and Edit Users by Scanning RFID Card</p>
+  </header>
+
+  <main>
+    <h2>Create New User</h2>
+    <div class="error" id="errorMsg" style="display:none;"></div>
+
+    <form id="createUserForm">
+      <label for="newUsername">Username (RFID ID)</label>
+      <input type="text" id="newUsername" name="username" placeholder="Scan RFID card to auto-fill" readonly required />
+
+      <label for="newPassword">Password</label>
+      <input type="password" id="newPassword" name="password" required />
+
+      <label for="newName">Full Name</label>
+      <input type="text" id="newName" name="name" required />
+
+      <label for="newPillName">Pill Name</label>
+      <input type="text" id="newPillName" name="pill_name" required />
+
+      <label for="newDosage">Dosage</label>
+      <input type="text" id="newDosage" name="dosage" required />
+
+      <label for="newQuantity">Quantity</label>
+      <input type="number" id="newQuantity" name="quantity" min="1" required />
+
+      <button type="submit">Create User</button>
+    </form>
+
+    <h2>Existing Users</h2>
+    <table id="usersTable">
+      <thead>
+        <tr>
+          <th>Username (RFID)</th>
+          <th>Name</th>
+          <th>Pill</th>
+          <th>Dosage</th>
+          <th>Quantity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Users will be dynamically inserted here -->
+      </tbody>
+    </table>
+  </main>
+
+  <script>
+    const errorMsg = document.getElementById('errorMsg');
+    const createUserForm = document.getElementById('createUserForm');
+    const usersTableBody = document.querySelector('#usersTable tbody');
+    const usernameInput = document.getElementById('newUsername');
+
+    // Poll backend every 2 seconds for last scanned RFID
+    setInterval(() => {
+      fetch('last_scan.php')
+        .then(res => res.json())
+        .then(data => {
+          if (data.last_rfid && (!usernameInput.value || usernameInput.value !== data.last_rfid)) {
+            usernameInput.value = data.last_rfid;
+            alert(`New RFID scanned: ${data.last_rfid}`);
+          }
+        })
+        .catch(err => {
+          console.log('Error fetching last RFID scan:', err);
+        });
+    }, 2000);
+
+    function populateUsersTable(users) {
+      usersTableBody.innerHTML = '';
+      users.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${user.username}</td>
+          <td>${user.name}</td>
+          <td>${user.pill_name}</td>
+          <td>${user.dosage}</td>
+          <td>${user.quantity}</td>
+        `;
+        usersTableBody.appendChild(tr);
+      });
+    }
+
+    function loadUsers() {
+      fetch('admin.php?action=list')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            populateUsersTable(data);
+          } else {
+            console.error('Invalid response format from server.');
+          }
+        })
+        .catch(err => {
+          console.error('Error loading users:', err);
+        });
+    }
+
+    window.onload = loadUsers;
+
+    createUserForm.addEventListener('submit', e => {
+      e.preventDefault();
+      errorMsg.style.display = 'none';
+
+      const formData = {
+        username: createUserForm.username.value.trim(),
+        password: createUserForm.password.value.trim(),
+        name: createUserForm.name.value.trim(),
+        pill_name: createUserForm.pill_name.value.trim(),
+        dosage: createUserForm.dosage.value.trim(),
+        quantity: Number(createUserForm.quantity.value),
+      };
+
+      if (!formData.username) {
+        alert('Please scan RFID card to set username.');
+        return;
+      }
+
+      fetch('admin.php?action=create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          errorMsg.style.display = 'block';
+          errorMsg.textContent = data.error;
+        } else {
+          alert('User created successfully!');
+          createUserForm.reset();
+          usernameInput.value = '';
+          loadUsers(); // Reload updated users
+        }
+      })
+      .catch(() => {
+        errorMsg.style.display = 'block';
+        errorMsg.textContent = 'Error connecting to server.';
+      });
+    });
+  </script>
+</body>
+</html>
